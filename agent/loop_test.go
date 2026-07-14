@@ -289,6 +289,7 @@ func TestMaxTurns(t *testing.T) {
 	a := newTestAgent(m)
 	sess := session.New("t9")
 	for i := 0; i < ctxmgr.MaxTurns; i++ {
+		sess.IncrementUserTurn()
 		sess.Append(llm.Message{Role: "user", Content: fmt.Sprintf("msg %d", i)})
 		sess.Append(answerMsg("ok"))
 	}

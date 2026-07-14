@@ -14,8 +14,9 @@ type Session struct {
 	ID          string          `json:"id"`
 	Messages    []llm.Message   `json:"messages"`
 	Summary     string          `json:"summary"`      // 压缩摘要
-	SummaryUpto int             `json:"summary_upto"` // 摘要已覆盖到的消息下标(压缩边界)
-	Todos       []tool.TodoItem `json:"todos"`        // todo 工具的状态,归属于单个 session
+	SummaryUpto   int             `json:"summary_upto"` // 摘要已覆盖到的消息下标(压缩边界)
+	Todos         []tool.TodoItem `json:"todos"`        // todo 工具的状态,归属于单个 session
+	UserTurnCount int             `json:"user_turn_count"`
 
 	mu sync.Mutex `json:"-"`
 }
@@ -39,17 +40,18 @@ func (s *Session) Truncate(n int) {
 	}
 }
 
-// UserTurns 返回用户消息条数,用于对话总轮次上限判断。
+// UserTurns 返回用户实际发起的对话轮次(非 text 模式下内部回填的 Observation)。
 func (s *Session) UserTurns() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	n := 0
-	for _, m := range s.Messages {
-		if m.Role == "user" {
-			n++
-		}
-	}
-	return n
+	return s.UserTurnCount
+}
+
+// IncrementUserTurn 在 Run 处理一条用户输入时调用,计入轮次上限。
+func (s *Session) IncrementUserTurn() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.UserTurnCount++
 }
 
 // TodoItems / SetTodoItems 实现 tool.State 窄接口:

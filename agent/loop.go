@@ -76,6 +76,13 @@ func (a *Agent) run(ctx context.Context, sess *session.Session, input string, em
 
 	startLen := len(sess.Messages)
 	sess.Append(llm.Message{Role: "user", Content: input})
+	sess.IncrementUserTurn()
+	// 快照工具状态,LLM 失败时回滚本轮副作用
+	savedTodos := append([]tool.TodoItem{}, sess.Todos...)
+	rollback := func() {
+		sess.Truncate(startLen)
+		sess.SetTodoItems(savedTodos)
+	}
 
 	maxIter := a.MaxIterations
 	if maxIter <= 0 {
@@ -83,7 +90,7 @@ func (a *Agent) run(ctx context.Context, sess *session.Session, input string, em
 	}
 	for i := 0; i < maxIter; i++ {
 		if err := ctx.Err(); err != nil {
-			sess.Truncate(startLen)
+			rollback()
 			fail(err)
 			return
 		}
@@ -98,7 +105,7 @@ func (a *Agent) run(ctx context.Context, sess *session.Session, input string, em
 		resp, usage, err := a.LLM.Chat(ctx, msgs, tools)
 		trace.LLM(sess.ID, i, len(msgs), len(resp.ToolCalls), usage.PromptTokens, usage.CompletionTokens, time.Since(llmStart), err)
 		if err != nil {
-			sess.Truncate(startLen)
+			rollback()
 			fail(fmt.Errorf("LLM 调用失败: %w", err))
 			return
 		}
